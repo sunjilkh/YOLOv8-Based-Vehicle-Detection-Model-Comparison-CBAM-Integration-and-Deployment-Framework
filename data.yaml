@@ -1,0 +1,24 @@
+# YOLOv8 dataset configuration for Bangladesh road vehicles
+
+# Absolute or relative path to dataset root
+path: /content/drive/MyDrive/YOLOv8 Traffic/dataset
+
+# Train and validation image directories (labels are auto-detected)
+train: images/train
+val: images/val
+
+# Number of classes
+nc: 10
+
+# Class names
+names:
+  0: bicycle
+  1: bus
+  2: car
+  3: cng
+  4: auto
+  5: bike
+  6: Multi-Class
+  7: rickshaw
+  8: truck
+  9: van

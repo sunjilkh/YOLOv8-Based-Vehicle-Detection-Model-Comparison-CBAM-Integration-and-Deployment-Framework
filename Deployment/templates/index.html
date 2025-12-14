@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YOLOv8 — Upload & Results</title>
+    <style>
+      /* Container & typography */
+  :root { --accent: #00529b; --muted:#666; --card:#ffffff; --bg:#f6f7f9; }
+  html,body { height:100%; margin:0; }
+  body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #111; }
+  .wrap { max-width: 980px; margin: 12px auto; padding: 12px; }
+  header { display:flex; align-items:baseline; gap:8px; }
+  h1 { font-size:18px; margin:0; }
+  p.lead { margin:4px 0 8px; color:var(--muted); }
+
+      /* Card */
+  .card { background: var(--card); border-radius:6px; padding:10px; box-shadow: 0 4px 12px rgba(20,30,50,0.06); border: 1px solid rgba(0,0,0,0.04); }
+
+      /* Form */
+  form#uploadForm { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .file-wrap { display:flex; gap:6px; align-items:center; }
+  input[type=file] { padding:4px; }
+  button.primary { background:var(--accent); color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-weight:600; }
+      button.primary:disabled { opacity:0.6; cursor:not-allowed; }
+      .muted { color:var(--muted); font-size:0.95rem; }
+
+  /* Images area: stacked vertically for IEEE figure layout */
+  .images { display:flex; flex-direction:column; gap:8px; margin-top:10px; align-items:flex-start; }
+  .figure { flex:1; display:flex; flex-direction:column; gap:6px; }
+  .figure img { width:100%; max-height:420px; object-fit:contain; border:1px solid #e6e9ee; border-radius:6px; background:#fff; }
+  .figcaption { font-size:0.85rem; color:var(--muted); }
+
+      /* Detections table */
+  #detections { margin-top:8px; }
+  table { width:100%; border-collapse:collapse; font-size:0.92rem; }
+  th, td { padding:6px 8px; border-bottom:1px solid #eef2f6; text-align:left; }
+      thead th { background:linear-gradient(180deg,#fbfdff,#f5f8fc); font-weight:600; color:#223; }
+      tbody tr:nth-child(odd) { background:#fff; }
+
+      /* Small utilities */
+      .status { margin-top:12px; display:flex; gap:12px; align-items:center; }
+      .spinner { width:18px; height:18px; border-radius:50%; border:3px solid rgba(0,0,0,0.08); border-top-color:var(--accent); animation:spin 1s linear infinite; display:inline-block; }
+      @keyframes spin { to { transform:rotate(360deg); } }
+      .hidden { display:none; }
+
+      /* Responsive */
+      @media (max-width:720px) {
+        .images { flex-direction:column; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>YOLOv8 — Vehicle detection (deployment)</h1>
+  </header>
+
+      <div class="card">
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+          <div class="file-wrap">
+            <label for="fileInput" class="muted">Select image</label>
+            <input id="fileInput" type="file" name="file" accept="image/*" required>
+          </div>
+          <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+            <div id="status" class="muted">Ready</div>
+            <div id="spinner" class="spinner hidden" aria-hidden="true"></div>
+            <button id="submitBtn" class="primary" type="submit">Upload & Detect</button>
+          </div>
+        </form>
+
+        <div id="imagesContainer" class="hidden">
+          <div class="images">
+            <figure class="figure">
+              <figcaption><strong>Figure 1a.</strong> Uploaded image</figcaption>
+              <img id="uploaded_img" src="" alt="uploaded image">
+            </figure>
+            <figure class="figure">
+              <figcaption><strong>Figure 1b.</strong> Annotated result</figcaption>
+              <img id="result_img" src="" alt="result image">
+            </figure>
+          </div>
+
+          <div id="detections" class="hidden">
+            <h3 style="margin:12px 0 8px 0">Detections</h3>
+            <table id="det_table">
+              <thead>
+                <tr><th>Class</th><th style="width:110px">Confidence</th><th>BBox (x1,y1,x2,y2)</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('uploadForm');
+      const status = document.getElementById('status');
+      const spinner = document.getElementById('spinner');
+      const imagesContainer = document.getElementById('imagesContainer');
+  const uploadedImg = document.getElementById('uploaded_img');
+  const resultImg = document.getElementById('result_img');
+      const detDiv = document.getElementById('detections');
+      const detTableBody = document.querySelector('#det_table tbody');
+      const submitBtn = document.getElementById('submitBtn');
+
+      function setBusy(b) {
+        if (b) {
+          spinner.classList.remove('hidden');
+          status.textContent = 'Processing...';
+          submitBtn.disabled = true;
+        } else {
+          spinner.classList.add('hidden');
+          status.textContent = 'Done';
+          submitBtn.disabled = false;
+        }
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files || fileInput.files.length === 0) {
+          alert('Please choose a file');
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+
+        setBusy(true);
+        imagesContainer.classList.add('hidden');
+        detDiv.classList.add('hidden');
+
+        try {
+          const res = await fetch('/upload', { method: 'POST', body: fd });
+          if (!res.ok) {
+            const text = await res.text();
+            status.textContent = 'Error: ' + text;
+            setBusy(false);
+            return;
+          }
+          const data = await res.json();
+
+          // Show images (append timestamp to avoid caching)
+          const t = Date.now();
+          uploadedImg.src = data.uploaded + '?t=' + t;
+          resultImg.src = data.result_image + '?t=' + t;
+          imagesContainer.classList.remove('hidden');
+
+          // Fill detections
+          detTableBody.innerHTML = '';
+          if (data.detections && data.detections.length > 0) {
+            data.detections.forEach(d => {
+              const tr = document.createElement('tr');
+              const cls = document.createElement('td'); cls.textContent = d.class_name || d.class_id;
+              const conf = document.createElement('td'); conf.textContent = (d.confidence || 0).toFixed(2);
+              const bbox = document.createElement('td'); bbox.textContent = d.bbox.map(v => Math.round(v)).join(', ');
+              tr.appendChild(cls); tr.appendChild(conf); tr.appendChild(bbox);
+              detTableBody.appendChild(tr);
+            });
+            detDiv.classList.remove('hidden');
+          } else {
+            detDiv.classList.add('hidden');
+          }
+
+          setBusy(false);
+        } catch (err) {
+          console.error(err);
+          status.textContent = 'Error: ' + err;
+          setBusy(false);
+        }
+      });
+    </script>
+  </body>
+</html>
